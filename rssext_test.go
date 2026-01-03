@@ -13,7 +13,12 @@ import (
 var testRssFeedExtXML = RssFeedExtXml{
 	XMLName:          xml.Name{Space: "", Local: "rss"},
 	Version:          "2.0",
-	ContentNamespace: "",
+	ContentNamespace: "http://purl.org/rss/1.0/modules/content/",
+	CustomNamespaces: []xml.Attr{
+		{Name: xml.Name{Local: "xmlns:atom"}, Value: "http://www.w3.org/2005/Atom"},
+		{Name: xml.Name{Local: "xmlns:custom"}, Value: "http://www.example.com/custom"},
+		{Name: xml.Name{Local: "xmlns:dc"}, Value: "http://purl.org/dc/elements/1.1/"},
+	},
 	Channel: &RssFeedExt{
 		XMLName:        xml.Name{Space: "", Local: "channel"},
 		Title:          "Lorem ipsum feed for an interval of 1 minutes",
@@ -187,14 +192,36 @@ func TestRssExtUnmarshal(t *testing.T) {
 		panic("AHH file bad")
 	}
 	bytes, _ := io.ReadAll(xmlFile)
-	if err := xml.Unmarshal(bytes, &xmlFeed); err != nil {
+	feedPtr, err := UnmarshalRssFeedExt(bytes)
+	if err != nil {
 		panic(err)
 	}
+	xmlFeed = *feedPtr
 
 	if !reflect.DeepEqual(testRssFeedExtXML, xmlFeed) {
 		diffs := pretty.Diff(testRssFeedExtXML, xmlFeed)
 		t.Log(pretty.Println(diffs))
 		t.Error("object was not unmarshalled correctly")
 	}
+}
 
+func TestRssExtRoundTrip(t *testing.T) {
+	// Marshal the test object
+	bytes, err := xml.MarshalIndent(testRssFeedExtXML, "", "  ")
+	if err != nil {
+		t.Fatalf("Failed to marshal: %v", err)
+	}
+
+	// Unmarshal it back
+	roundTripFeed, err := UnmarshalRssFeedExt(bytes)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+
+	// Compare
+	if !reflect.DeepEqual(testRssFeedExtXML, *roundTripFeed) {
+		diffs := pretty.Diff(testRssFeedExtXML, *roundTripFeed)
+		t.Log(pretty.Println(diffs))
+		t.Error("Roundtrip failed: objects are different")
+	}
 }

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<rss xmlns:dc="http://purl.org/dc/elements/1.1/" 
-    xmlns:content="http://purl.org/rss/1.0/modules/content/" 
-    xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+<rss xmlns:atom="http://www.w3.org/2005/Atom"
+    xmlns:content="http://purl.org/rss/1.0/modules/content/"
+    xmlns:custom="http://www.example.com/custom"
+    xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
     <channel>
         <title><![CDATA[Lorem ipsum feed for an interval of 1 minutes]]></title>
         <description><![CDATA[This is a constantly updating lorem ipsum feed]]></description>

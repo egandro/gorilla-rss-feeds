@@ -5,16 +5,19 @@ package feeds
 //    http://cyber.law.harvard.edu/rss/rss.html
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"time"
 )
 
 // private wrapper around the RssFeedExt which gives us the <rss>..</rss> xml
 type RssFeedExtXml struct {
-	XMLName          xml.Name `xml:"rss"`
-	Version          string   `xml:"version,attr"`
-	ContentNamespace string   `xml:"xmlns:content,attr"`
+	XMLName          xml.Name   `xml:"rss"`
+	Version          string     `xml:"version,attr"`
+	ContentNamespace string     `xml:"xmlns:content,attr"`
+	CustomNamespaces []xml.Attr `xml:",attr"`
 	Channel          *RssFeedExt
 }
 
@@ -179,5 +182,52 @@ func (r *RssFeedExt) FeedXml() interface{} {
 		Version:          "2.0",
 		Channel:          r,
 		ContentNamespace: "http://purl.org/rss/1.0/modules/content/",
+		CustomNamespaces: []xml.Attr{
+			// TODO: we need more here ...
+			{Name: xml.Name{Local: "xmlns:content"}, Value: "http://purl.org/rss/1.0/modules/content/"},
+		},
 	}
+}
+
+// UnmarshalRssFeedExt parses the XML data into an RssFeedExtXml, preserving xmlns attributes.
+func UnmarshalRssFeedExt(data []byte) (*RssFeedExtXml, error) {
+	feed := &RssFeedExtXml{}
+
+	// Standard unmarshal for content
+	if err := xml.Unmarshal(data, feed); err != nil {
+		return nil, err
+	}
+
+	// xml.Unmarshal strips xmlns attributes, so we parse them manually using RawToken
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	for {
+		t, err := dec.RawToken()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		if start, ok := t.(xml.StartElement); ok {
+			if start.Name.Local == "rss" {
+				for _, attr := range start.Attr {
+					if attr.Name.Space == "xmlns" || (attr.Name.Space == "" && attr.Name.Local == "xmlns") {
+						if attr.Name.Space == "xmlns" && attr.Name.Local == "content" {
+							feed.ContentNamespace = attr.Value
+						} else {
+							// To ensure round-trip compatibility with xml.Marshal (which strips unused namespaces),
+							// we treat these as regular attributes by including the prefix in Local.
+							if attr.Name.Space == "xmlns" {
+								attr.Name.Local = "xmlns:" + attr.Name.Local
+								attr.Name.Space = ""
+							}
+							feed.CustomNamespaces = append(feed.CustomNamespaces, attr)
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+	return feed, nil
 }
