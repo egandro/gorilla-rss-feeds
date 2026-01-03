@@ -46,14 +46,46 @@ var testRssFeedExtXML = RssFeedExtXml{
 				Title:       "Lorem ipsum 2018-10-30T23:22:00+00:00",
 				Link:        "http://example.com/test/1540941720",
 				Description: "Exercitation ut Lorem sint proident.",
-				Content:     (*RssContentExt)(nil),
+				Content:     (*RssContent)(nil),
 				Author:      "",
 				Category:    "",
 				Comments:    "",
-				Enclosure:   (*RssEnclosureExt)(nil),
-				Guid:        &RssGuidExt{XMLName: xml.Name{Local: "guid"}, Id: "http://example.com/test/1540941720", IsPermaLink: "true"},
+				Enclosure:   (*RssEnclosure)(nil),
+				Guid:        &RssGuid{XMLName: xml.Name{Local: "guid"}, Id: "http://example.com/test/1540941720", IsPermaLink: "true"},
 				PubDate:     "Tue, 30 Oct 2018 23:22:00 GMT",
 				Source:      "",
+				Extensions: []Extension{
+					{
+						XMLName: xml.Name{Space: "http://purl.org/dc/elements/1.1/", Local: "creator"},
+						Value:   "John Smith",
+					},
+					{
+						XMLName: xml.Name{Space: "http://www.example.com/custom", Local: "group"},
+						Attrs:   []xml.Attr{{Name: xml.Name{Local: "name"}, Value: "item name"}},
+						Children: []Extension{
+							{
+								XMLName: xml.Name{Space: "http://www.example.com/custom", Local: "elem"},
+								Value:   "item content",
+							},
+						},
+					},
+				},
+			},
+		},
+		Extensions: []Extension{
+			{
+				XMLName: xml.Name{Local: "author"},
+				Value:   "John Smith",
+			},
+			{
+				XMLName: xml.Name{Space: "http://www.example.com/custom", Local: "group"},
+				Attrs:   []xml.Attr{{Name: xml.Name{Local: "name"}, Value: "channel name"}},
+				Children: []Extension{
+					{
+						XMLName: xml.Name{Space: "http://www.example.com/custom", Local: "elem"},
+						Value:   "channel content",
+					},
+				},
 			},
 		},
 	},
@@ -97,5 +129,65 @@ func TestRssExtRoundTrip(t *testing.T) {
 		diffs := pretty.Diff(testRssFeedExtXML, *roundTripFeed)
 		t.Log(pretty.Println(diffs))
 		t.Error("Roundtrip failed: objects are different")
+	}
+}
+
+func TestRssExtCustomExtensions(t *testing.T) {
+	ns := "http://www.example.com/custom"
+
+	findExt := func(exts []Extension, space, local string) *Extension {
+		for i := range exts {
+			if exts[i].XMLName.Space == space && exts[i].XMLName.Local == local {
+				return &exts[i]
+			}
+		}
+		return nil
+	}
+
+	// Check Channel
+	group := findExt(testRssFeedExtXML.Channel.Extensions, ns, "group")
+	if group == nil {
+		t.Fatal("Channel custom:group not found")
+	}
+
+	elem := findExt(group.Children, ns, "elem")
+	if elem == nil {
+		t.Fatal("Channel custom:elem not found inside group")
+	}
+
+	if elem.Value != "channel content" {
+		t.Errorf("Channel custom:elem value mismatch. Got %q, want %q", elem.Value, "channel content")
+	}
+
+	// Check Item
+	if len(testRssFeedExtXML.Channel.Items) == 0 {
+		t.Fatal("No items in channel")
+	}
+	item := testRssFeedExtXML.Channel.Items[0]
+
+	group = findExt(item.Extensions, ns, "group")
+	if group == nil {
+		t.Fatal("Item custom:group not found")
+	}
+
+	// Check attribute
+	foundAttr := false
+	for _, attr := range group.Attrs {
+		if attr.Name.Local == "name" && attr.Value == "item name" {
+			foundAttr = true
+			break
+		}
+	}
+	if !foundAttr {
+		t.Error("Item custom:group attribute 'name' with value 'item name' not found")
+	}
+
+	elem = findExt(group.Children, ns, "elem")
+	if elem == nil {
+		t.Fatal("Item custom:elem not found inside group")
+	}
+
+	if elem.Value != "item content" {
+		t.Errorf("Item custom:elem value mismatch. Got %q, want %q", elem.Value, "item content")
 	}
 }

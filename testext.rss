@@ -13,6 +13,11 @@
         <pubDate>Tue, 30 Oct 2018 23:22:00 GMT</pubDate>
         <copyright><![CDATA[Michael Bertolacci, licensed under a Creative Commons Attribution 3.0 Unported License.]]></copyright>
         <ttl>60</ttl>
+        <custom:group name="channel name">
+            <custom:elem>
+                channel content
+            </custom:elem>
+        </custom:group>
         <item>
             <title><![CDATA[Lorem ipsum 2018-10-30T23:22:00+00:00]]></title>
             <description><![CDATA[Exercitation ut Lorem sint proident.]]></description>
@@ -20,6 +25,11 @@
             <guid isPermaLink="true">http://example.com/test/1540941720</guid>
             <dc:creator><![CDATA[John Smith]]></dc:creator>
             <pubDate>Tue, 30 Oct 2018 23:22:00 GMT</pubDate>
+            <custom:group name="item name">
+                <custom:elem>
+                    item content
+                </custom:elem>
+            </custom:group>
         </item>
     </channel>
 </rss>

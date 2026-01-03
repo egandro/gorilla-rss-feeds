@@ -9,6 +9,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -19,28 +20,26 @@ type RssFeedExtXml struct {
 	ContentNamespace string     `xml:"xmlns:content,attr"`
 	CustomNamespaces []xml.Attr `xml:",attr"`
 	Channel          *RssFeedExt
-}
-
-type RssContentExt struct {
-	XMLName xml.Name `xml:"content:encoded"`
-	Content string   `xml:",cdata"`
+	Extensions       []Extension `xml:",any"`
 }
 
 type RssImageExt struct {
-	XMLName xml.Name `xml:"image"`
-	Url     string   `xml:"url"`
-	Title   string   `xml:"title"`
-	Link    string   `xml:"link"`
-	Width   int      `xml:"width,omitempty"`
-	Height  int      `xml:"height,omitempty"`
+	XMLName    xml.Name    `xml:"image"`
+	Url        string      `xml:"url"`
+	Title      string      `xml:"title"`
+	Link       string      `xml:"link"`
+	Width      int         `xml:"width,omitempty"`
+	Height     int         `xml:"height,omitempty"`
+	Extensions []Extension `xml:",any"`
 }
 
 type RssTextInputExt struct {
-	XMLName     xml.Name `xml:"textInput"`
-	Title       string   `xml:"title"`
-	Description string   `xml:"description"`
-	Name        string   `xml:"name"`
-	Link        string   `xml:"link"`
+	XMLName     xml.Name    `xml:"textInput"`
+	Title       string      `xml:"title"`
+	Description string      `xml:"description"`
+	Name        string      `xml:"name"`
+	Link        string      `xml:"link"`
+	Extensions  []Extension `xml:",any"`
 }
 
 type RssFeedExt struct {
@@ -65,6 +64,7 @@ type RssFeedExt struct {
 	Image          *RssImageExt
 	TextInput      *RssTextInputExt
 	Items          []*RssItemExt `xml:"item"`
+	Extensions     []Extension   `xml:",any"`
 }
 
 type RssItemExt struct {
@@ -72,29 +72,15 @@ type RssItemExt struct {
 	Title       string   `xml:"title"`       // required
 	Link        string   `xml:"link"`        // required
 	Description string   `xml:"description"` // required
-	Content     *RssContentExt
+	Content     *RssContent
 	Author      string `xml:"author,omitempty"`
 	Category    string `xml:"category,omitempty"`
 	Comments    string `xml:"comments,omitempty"`
-	Enclosure   *RssEnclosureExt
-	Guid        *RssGuidExt // Id used
+	Enclosure   *RssEnclosure
+	Guid        *RssGuid    // Id used
 	PubDate     string      `xml:"pubDate,omitempty"` // created or updated
 	Source      string      `xml:"source,omitempty"`
-}
-
-type RssEnclosureExt struct {
-	//RSS 2.0 <enclosure url="http://example.com/file.mp3" length="123456789" type="audio/mpeg" />
-	XMLName xml.Name `xml:"enclosure"`
-	Url     string   `xml:"url,attr"`
-	Length  string   `xml:"length,attr"`
-	Type    string   `xml:"type,attr"`
-}
-
-type RssGuidExt struct {
-	//RSS 2.0 <guid isPermaLink="true">http://inessential.com/2002/09/01.php#a2</guid>
-	XMLName     xml.Name `xml:"guid"`
-	Id          string   `xml:",chardata"`
-	IsPermaLink string   `xml:"isPermaLink,attr,omitempty"` // "true", "false", or an empty string
+	Extensions  []Extension `xml:",any"`
 }
 
 type RssExt struct {
@@ -109,13 +95,13 @@ func newRssItemExt(i *Item) *RssItemExt {
 		PubDate:     anyTimeFormat(time.RFC1123Z, i.Created, i.Updated),
 	}
 	if i.Id != "" {
-		item.Guid = &RssGuidExt{Id: i.Id, IsPermaLink: i.IsPermaLink}
+		item.Guid = &RssGuid{Id: i.Id, IsPermaLink: i.IsPermaLink}
 	}
 	if i.Link != nil {
 		item.Link = i.Link.Href
 	}
 	if len(i.Content) > 0 {
-		item.Content = &RssContentExt{Content: i.Content}
+		item.Content = &RssContent{Content: i.Content}
 	}
 	if i.Source != nil {
 		item.Source = i.Source.Href
@@ -123,7 +109,7 @@ func newRssItemExt(i *Item) *RssItemExt {
 
 	// Define a closure
 	if i.Enclosure != nil && i.Enclosure.Type != "" && i.Enclosure.Length != "" {
-		item.Enclosure = &RssEnclosureExt{Url: i.Enclosure.Url, Type: i.Enclosure.Type, Length: i.Enclosure.Length}
+		item.Enclosure = &RssEnclosure{Url: i.Enclosure.Url, Type: i.Enclosure.Type, Length: i.Enclosure.Length}
 	}
 
 	if i.Author != nil {
@@ -182,10 +168,6 @@ func (r *RssFeedExt) FeedXml() interface{} {
 		Version:          "2.0",
 		Channel:          r,
 		ContentNamespace: "http://purl.org/rss/1.0/modules/content/",
-		CustomNamespaces: []xml.Attr{
-			// TODO: we need more here ...
-			{Name: xml.Name{Local: "xmlns:content"}, Value: "http://purl.org/rss/1.0/modules/content/"},
-		},
 	}
 }
 
@@ -230,4 +212,35 @@ func UnmarshalRssFeedExt(data []byte) (*RssFeedExtXml, error) {
 		}
 	}
 	return feed, nil
+}
+
+type Extension struct {
+	XMLName  xml.Name
+	Attrs    []xml.Attr  `xml:",any,attr"`
+	Children []Extension `xml:",any"`
+	Value    string      `xml:",chardata"`
+}
+
+func (e *Extension) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	// Filter xmlns attributes
+	var filteredAttrs []xml.Attr
+	for _, attr := range start.Attr {
+		if attr.Name.Space == "xmlns" || attr.Name.Local == "xmlns" {
+			continue
+		}
+		filteredAttrs = append(filteredAttrs, attr)
+	}
+	// Update start.Attr so DecodeElement uses the filtered list
+	start.Attr = filteredAttrs
+
+	type extensionAlias Extension
+	var v extensionAlias
+
+	if err := d.DecodeElement(&v, &start); err != nil {
+		return err
+	}
+
+	*e = Extension(v)
+	e.Value = strings.TrimSpace(e.Value)
+	return nil
 }
